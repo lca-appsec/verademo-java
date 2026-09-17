@@ -146,7 +146,7 @@ public class UserController {
 
 		Connection connect = null;
 		/* START BAD CODE */
-		Statement sqlStatement = null;
+		PreparedStatement sqlStatement = null;
 		/* END BAD CODE */
 		/* START GOOD CODE
 		PreparedStatement sqlStatement = null;
@@ -161,11 +161,11 @@ public class UserController {
 			/* START BAD CODE */
 			// Execute the query
 			logger.info("Creating the Statement");
-			String sqlQuery = "select username, password, password_hint, created_at, last_login, real_name, blab_name from users where username='"
-					+ username + "';";
-			sqlStatement = connect.createStatement();
+			String sqlQuery = "select username, password, password_hint, created_at, last_login, real_name, blab_name from users where username=?";
+			sqlStatement = connect.prepareStatement(sqlQuery);
+			sqlStatement.setString(1, username);
 			logger.info("Execute the Statement");
-			ResultSet result = sqlStatement.executeQuery(sqlQuery);
+			ResultSet result = sqlStatement.executeQuery();
 			/* END BAD CODE */
 			/* START GOOD CODE
 			String sqlQuery = "select * from users where username=? and password=?;";
