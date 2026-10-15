@@ -1,6 +1,8 @@
 package com.veracode.verademo.controller;
 
 import java.lang.reflect.InvocationTargetException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -370,7 +372,7 @@ public class BlabController {
 			return Utils.redirect("login?target=feed");
 		}
 
-		logger.info("User is Logged In - continuing... UA=" + httpRequest.getHeader("User-Agent") + " U=" + username);
+		logger.info("User is Logged In - continuing... UA=" + URLEncoder.encode(httpRequest.getHeader("User-Agent"), StandardCharsets.UTF_8) + " U=" + URLEncoder.encode(username, StandardCharsets.UTF_8));
 		Connection connect = null;
 		PreparedStatement addComment = null;
 		String addCommentSql = "INSERT INTO comments (blabid, blabber, content, timestamp) values (?, ?, ?, ?);";
