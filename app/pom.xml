@@ -32,6 +32,31 @@
 				<artifactId>log4j-api</artifactId>
 				<version>2.25.5</version>
 			</dependency>
+			<!-- Pin commons-compress to safe version: CVE-2023-42503, CVE-2024-25710, CVE-2024-26308 -->
+			<!-- Transitive dependency brought in by parent dependencies -->
+			<!-- Remove when parent dependencies are upgraded to versions that include a safe transitive -->
+			<dependency>
+				<groupId>org.apache.commons</groupId>
+				<artifactId>commons-compress</artifactId>
+				<version>1.26.0</version>
+			</dependency>
+			<!-- Pin snappy to safe version: CVE-2024-36124 -->
+			<!-- Transitive dependency -->
+			<!-- Remove when parent dependencies are upgraded to versions that include a safe transitive -->
+			<dependency>
+				<groupId>org.iq80.snappy</groupId>
+				<artifactId>snappy</artifactId>
+				<version>0.5</version>
+			</dependency>
+			<!-- Pin log4j-core to safe version: CVE-2019-17571, CVE-2021-4104, CVE-2022-23307, CVE-2020-9493, CVE-2022-23302, CVE-2022-23305, CVE-2023-26464 -->
+			<!-- Transitive dependency log4j:log4j migrated to org.apache.logging.log4j:log4j-core -->
+			<!-- Brought in by slf4j-log4j12 -->
+			<!-- Remove when slf4j-log4j12 is upgraded or replaced with a version that includes a safe transitive -->
+			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-core</artifactId>
+				<version>2.25.4</version>
+			</dependency>
 			<!-- Pin org.apache.sling.api to safe version: CVE-2013-2254, CVE-2015-2944, CVE-2022-32549 -->
 			<!-- Transitive dependency brought in by maven-sling-plugin -->
 			<!-- Remove when maven-sling-plugin is upgraded to a version that includes a safe transitive -->
@@ -40,21 +65,21 @@
 				<artifactId>org.apache.sling.api</artifactId>
 				<version>2.27.6</version>
 			</dependency>
-			<!-- Pin jackson-core to safe version: CVE-2025-49128, CVE-2025-52999, CVE-2026-68494 -->
+			<!-- Pin jackson-core to safe version: CVE-2025-49128, CVE-2025-52999, CVE-2026-68494, CVE-2026-89425, CVE-2026-89407 -->
 			<!-- Transitive dependency brought in by Spring Boot dependencies -->
 			<!-- Remove when parent dependencies are upgraded to versions that include a safe transitive -->
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-core</artifactId>
-				<version>2.18.8</version>
+				<version>2.18.11</version>
 			</dependency>
-			<!-- Pin jackson-databind to safe version: CVE-2020-36518, CVE-2022-42004, CVE-2022-42003, CVE-2021-46877, CVE-2026-54514, CVE-2026-54513, CVE-2026-54512 -->
+			<!-- Pin jackson-databind to safe version: CVE-2020-36518, CVE-2022-42004, CVE-2022-42003, CVE-2021-46877, CVE-2026-54514, CVE-2026-54513, CVE-2026-54512, CVE-2026-91776, CVE-2026-91777 -->
 			<!-- Transitive dependency brought in by Spring Boot dependencies -->
 			<!-- Remove when parent dependencies are upgraded to versions that include a safe transitive -->
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>2.18.10</version>
+				<version>2.18.11</version>
 			</dependency>
 			<!-- Pin jakarta.el to safe version: CVE-2021-28170 -->
 			<!-- Transitive dependency brought in by Spring Boot/Tomcat dependencies -->
@@ -72,13 +97,13 @@
 				<artifactId>junit</artifactId>
 				<version>4.13.2</version>
 			</dependency>
-			<!-- Pin logback-classic to 1.5.38 to match logback-core safe version -->
+			<!-- Pin logback-classic to safe version: CVE-2026-19880 -->
 			<!-- Transitive dependency brought in by Spring Boot dependencies -->
 			<!-- Remove when parent dependencies are upgraded to versions that include a safe transitive -->
 			<dependency>
 				<groupId>ch.qos.logback</groupId>
 				<artifactId>logback-classic</artifactId>
-				<version>1.5.38</version>
+				<version>1.6.3</version>
 			</dependency>
 			<!-- Pin logback-core to safe version: CVE-2021-42550, CVE-2023-6378, CVE-2024-12798, CVE-2024-12801, CVE-2025-11226, CVE-2026-1225 -->
 			<!-- Transitive dependency brought in by Spring Boot dependencies -->
@@ -86,7 +111,7 @@
 			<dependency>
 				<groupId>ch.qos.logback</groupId>
 				<artifactId>logback-core</artifactId>
-				<version>1.5.38</version>
+				<version>1.6.3</version>
 			</dependency>
 			<!-- Pin org.apache.sling.commons.json to safe version: CVE-2022-47937 -->
 			<!-- Transitive dependency -->
@@ -226,7 +251,7 @@
 		<dependency>
 			<groupId>org.keycloak</groupId>
 			<artifactId>keycloak-saml-core</artifactId>
-			<version>1.8.1.Final</version>
+			<version>26.6.2</version>
 		</dependency>
 
 		<dependency>
