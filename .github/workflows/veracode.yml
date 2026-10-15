@@ -38,6 +38,7 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
       - name: Veracode SCA
+        working-directory: ./app
         env:
           SRCCLR_API_TOKEN: ${{ secrets.SCA }}
         run: |
@@ -54,7 +55,7 @@ jobs:
           cd "$RUNNER_TEMP/veracode-cli"
           curl -fsSL https://tools.veracode.com/veracode-cli/install | sh
           cd "$GITHUB_WORKSPACE"
-          "$RUNNER_TEMP/veracode-cli/veracode" fix sca . \
+          "$RUNNER_TEMP/veracode-cli/veracode" fix sca "$GITHUB_WORKSPACE/app" \
             --results "$RUNNER_TEMP/sca-results.json" --remote
 
       - name: Create SCA fixes pull request
