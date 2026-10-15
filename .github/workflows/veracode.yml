@@ -1,0 +1,75 @@
+# Configuration for the official Veracode GitHub Workflow Integration.
+# This is not a standalone GitHub Actions workflow.
+# Run scans on pushed commits and on pull requests targeting main.
+# The integration owns job scheduling; YAML section order is not execution order.
+debug: false
+default:
+  runs_on: ubuntu-latest
+
+veracode_iac_secrets_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - reopened
+      - synchronize
+    target_branch:
+      - main
+  break_build_policy_findings: false
+  break_build_on_error: false
+  error_message: 'Veracode IaC scan could not complete. Review the workflow logs.'
+  # IaC has no built-in default policy. Set your own IaC policy name if needed.
+  # policy: 'Your IaC Policy'
+
+veracode_sca_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - reopened
+      - synchronize
+    target_branch:
+      - main
+  break_build_policy_findings: false
+  break_build_on_error: false
+  error_message: 'Veracode SCA scan could not complete. Review the workflow logs.'
+  fix_for_sca:
+    pull_request:
+      trigger: true
+  # After the SCA findings comment appears, reply: @veracode-fix SCA-*
+  # Requires the current Workflow App and an enabled Fix for SCA entitlement.
+
+veracode_static_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+    target_branch:
+      - main
+  analysis_branch: main
+  analysis_on_platform: true
+  # Official integration fallback when the application has no assigned policy.
+  policy: 'Veracode Recommended Medium + SCA'
+  break_build_policy_findings: false
+  break_build_invalid_policy: false
+  break_build_on_error: false
+  create_code_scanning_alert: false
+  create_issue: false
+  filter_mitigated_flaws: true
+  error_message: 'Veracode SAST scan could not complete. Review the workflow logs.'
+  # SAST Fix is implemented in the companion GitHub Actions workflow.
