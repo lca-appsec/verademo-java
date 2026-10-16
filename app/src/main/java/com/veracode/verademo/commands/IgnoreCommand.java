@@ -5,6 +5,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -25,7 +27,7 @@ public class IgnoreCommand implements BlabberCommand {
 	@Override
 	public void execute(String blabberUsername) {
 		String sqlQuery = "DELETE FROM listeners WHERE blabber=? AND listener=?;";
-		logger.info(sqlQuery);
+			logger.info(URLEncoder.encode(sqlQuery, StandardCharsets.UTF_8));
 		PreparedStatement action;
 		try {
 			action = connect.prepareStatement(sqlQuery);

@@ -1,6 +1,8 @@
 package com.veracode.verademo.controller;
 
 import java.lang.reflect.InvocationTargetException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -370,7 +372,7 @@ public class BlabController {
 			return Utils.redirect("login?target=feed");
 		}
 
-		logger.info("User is Logged In - continuing... UA=" + httpRequest.getHeader("User-Agent") + " U=" + username);
+		logger.info("User is Logged In - continuing... UA=" + URLEncoder.encode(httpRequest.getHeader("User-Agent"), StandardCharsets.UTF_8) + " U=" + URLEncoder.encode(username, StandardCharsets.UTF_8));
 		Connection connect = null;
 		PreparedStatement addComment = null;
 		String addCommentSql = "INSERT INTO comments (blabid, blabber, content, timestamp) values (?, ?, ?, ?);";
@@ -447,11 +449,36 @@ public class BlabController {
 		PreparedStatement blabberQuery = null;
 
 		/* START EXAMPLE VULNERABILITY */
+		// Validate sort parameter to prevent SQL injection
+		String validatedSort;
+		switch (sort) {
+			case "blab_name ASC":
+				validatedSort = "blab_name ASC";
+				break;
+			case "blab_name DESC":
+				validatedSort = "blab_name DESC";
+				break;
+			case "username ASC":
+				validatedSort = "username ASC";
+				break;
+			case "username DESC":
+				validatedSort = "username DESC";
+				break;
+			case "created_at ASC":
+				validatedSort = "created_at ASC";
+				break;
+			case "created_at DESC":
+				validatedSort = "created_at DESC";
+				break;
+			default:
+				validatedSort = "blab_name ASC";
+				break;
+		}
 		String blabbersSql = "SELECT users.username," + " users.blab_name," + " users.created_at,"
 				+ " SUM(if(listeners.listener=?, 1, 0)) as listeners,"
 				+ " SUM(if(listeners.status='Active',1,0)) as listening"
 				+ " FROM users LEFT JOIN listeners ON users.username = listeners.blabber"
-				+ " WHERE users.username NOT IN (\"admin\",?)" + " GROUP BY users.username" + " ORDER BY " + sort + ";";
+				+ " WHERE users.username NOT IN (\"admin\",?)" + " GROUP BY users.username" + " ORDER BY " + validatedSort + ";" ;
 
 		try {
 			logger.info("Getting Database connection");

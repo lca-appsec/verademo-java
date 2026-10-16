@@ -146,7 +146,7 @@ public class UserController {
 
 		Connection connect = null;
 		/* START BAD CODE */
-		Statement sqlStatement = null;
+		PreparedStatement sqlStatement = null;
 		/* END BAD CODE */
 		/* START GOOD CODE
 		PreparedStatement sqlStatement = null;
@@ -161,11 +161,11 @@ public class UserController {
 			/* START BAD CODE */
 			// Execute the query
 			logger.info("Creating the Statement");
-			String sqlQuery = "select username, password, password_hint, created_at, last_login, real_name, blab_name from users where username='"
-					+ username + "';";
-			sqlStatement = connect.createStatement();
+			String sqlQuery = "select username, password, password_hint, created_at, last_login, real_name, blab_name from users where username=?";
+			sqlStatement = connect.prepareStatement(sqlQuery);
+			sqlStatement.setString(1, username);
 			logger.info("Execute the Statement");
-			ResultSet result = sqlStatement.executeQuery(sqlQuery);
+			ResultSet result = sqlStatement.executeQuery();
 			/* END BAD CODE */
 			/* START GOOD CODE
 			String sqlQuery = "select * from users where username=? and password=?;";
@@ -258,10 +258,11 @@ public class UserController {
 
 			Connection connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
 
-			String sql = "SELECT password_hint FROM users WHERE username = '" + username + "'";
+			String sql = "SELECT password_hint FROM users WHERE username = ?";
 			logger.info(sql);
-			Statement statement = connect.createStatement();
-			ResultSet result = statement.executeQuery(sql);
+			PreparedStatement statement = connect.prepareStatement(sql);
+			statement.setString(1, username);
+			ResultSet result = statement.executeQuery();
 			if (result.first()) {
 				String password = result.getString("password_hint");
 				String formatString = "Username '" + username + "' has password: %.2s%s";
@@ -320,9 +321,10 @@ public class UserController {
 			Class.forName("com.mysql.jdbc.Driver");
 			Connection connect = DriverManager.getConnection(Constants.create().getJdbcConnectionString());
 
-			String sql = "SELECT username FROM users WHERE username = '" + username + "'";
-			Statement statement = connect.createStatement();
-			ResultSet result = statement.executeQuery(sql);
+			String sql = "SELECT username FROM users WHERE username = ?";
+			PreparedStatement statement = connect.prepareStatement(sql);
+			statement.setString(1, username);
+			ResultSet result = statement.executeQuery();
 			if (result.first()) {
 				model.addAttribute("error", "Username '" + username + "' already exists!");
 				return "register";
@@ -364,7 +366,7 @@ public class UserController {
 		}
 
 		Connection connect = null;
-		Statement sqlStatement = null;
+		PreparedStatement sqlStatement = null;
 
 		try {
 			// Get the Database Connection
@@ -376,18 +378,15 @@ public class UserController {
 			// Execute the query
 			String mysqlCurrentDateTime = (new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"))
 					.format(Calendar.getInstance().getTime());
-			StringBuilder query = new StringBuilder();
-			query.append("insert into users (username, password, created_at, real_name, blab_name) values(");
-			query.append("'" + username + "',");
-			query.append("'" + BCrypt.hashpw(password, BCrypt.gensalt()) + "',");
-			query.append("'" + mysqlCurrentDateTime + "',");
-			query.append("'" + realName + "',");
-			query.append("'" + blabName + "'");
-			query.append(");");
-
-			sqlStatement = connect.createStatement();
-			sqlStatement.execute(query.toString());
-			logger.info(query.toString());
+			String sql = "INSERT INTO users (username, password, created_at, real_name, blab_name) VALUES (?, ?, ?, ?, ?)";
+			PreparedStatement sqlStatement = connect.prepareStatement(sql);
+			sqlStatement.setString(1, username);
+			sqlStatement.setString(2, BCrypt.hashpw(password, BCrypt.gensalt()));
+			sqlStatement.setString(3, mysqlCurrentDateTime);
+			sqlStatement.setString(4, realName);
+			sqlStatement.setString(5, blabName);
+			sqlStatement.executeUpdate();
+			logger.info(sql);
 			/* END EXAMPLE VULNERABILITY */
 
 			emailUser(username);
@@ -487,11 +486,11 @@ public class UserController {
 			ArrayList<String> events = new ArrayList<String>();
 
 			/* START EXAMPLE VULNERABILITY */
-			String sqlMyEvents = "select event from users_history where blabber=\"" + username
-					+ "\" ORDER BY eventid DESC; ";
+			String sqlMyEvents = "select event from users_history where blabber=? ORDER BY eventid DESC";
 			logger.info(sqlMyEvents);
-			Statement sqlStatement = connect.createStatement();
-			ResultSet userHistoryResult = sqlStatement.executeQuery(sqlMyEvents);
+			PreparedStatement sqlStatement = connect.prepareStatement(sqlMyEvents);
+			sqlStatement.setString(1, username);
+			ResultSet userHistoryResult = sqlStatement.executeQuery();
 			/* END EXAMPLE VULNERABILITY */
 
 			while (userHistoryResult.next()) {
