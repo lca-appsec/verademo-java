@@ -93,7 +93,7 @@ jobs:
           unzip -o "$RUNNER_TEMP/pipeline-scan.zip" pipeline-scan.jar -d "$RUNNER_TEMP"
           java -jar "$RUNNER_TEMP/pipeline-scan.jar" \
             -vid "$VID" -vkey "$VKEY" -f "$RUNNER_TEMP/package/veracode.zip" \
-            --issue_details true --esd true --json_output true --json_output_file results.json
+            --issue_details true -esd true --json_output true --json_output_file results.json
 
       - name: Veracode Fix for SAST
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('results.json') != ''
