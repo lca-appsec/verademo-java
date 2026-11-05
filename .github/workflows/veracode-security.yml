@@ -91,7 +91,11 @@ jobs:
           VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
           VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
         run: |
-          "$RUNNER_TEMP/veracode" package --source . --output "$RUNNER_TEMP/veracode-artifacts" --trust --strict --verbose
+          "$RUNNER_TEMP/veracode" package --source . --output "$RUNNER_TEMP/veracode-artifacts" --trust --strict
+          # O CLI descarta artefatos com data antiga (ex.: WAR do Spring Boot com data de 1980).
+          # Sem isto, o scan analisaria só o JavaScript e a pipeline ficaria verde.
+          find . -type f -path '*/target/*' \( -name '*.war' -o -name '*.jar' \) -not -path '*/target/*/*' \
+            -exec cp -n {} "$RUNNER_TEMP/veracode-artifacts/" \;
 
       - uses: actions/upload-artifact@v7
         with:
@@ -124,6 +128,8 @@ jobs:
         uses: veracode/veracode-sca@v2.1.20
         env:
           SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
+          VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
         with:
           github_token: ${{ github.token }}
           create-issues: false
