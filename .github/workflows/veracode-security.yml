@@ -91,7 +91,7 @@ jobs:
           VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
           VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
         run: |
-          "$RUNNER_TEMP/veracode" package --source . --output "$RUNNER_TEMP/veracode-artifacts" --trust --strict
+          "$RUNNER_TEMP/veracode" package --source . --output "$RUNNER_TEMP/veracode-artifacts" --trust --strict --verbose
 
       - uses: actions/upload-artifact@v7
         with:
@@ -238,6 +238,10 @@ jobs:
           name: veracode-artifact
           path: veracode-artifacts
 
+      # A action v0.2.3 não envia uma pasta para sandbox: é preciso passar um único arquivo.
+      - name: Unir os arquivos em um único pacote
+        run: cd veracode-artifacts && zip -r ../veracode-package.zip .
+
       - name: Veracode Sandbox Scan
         continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
         uses: veracode/uploadandscan-action@v0.2.3
@@ -248,7 +252,7 @@ jobs:
           createprofile: true
           createsandbox: true
           sandboxname: ${{ needs.setup.outputs.branch_slug }}
-          filepath: veracode-artifacts/
+          filepath: veracode-package.zip
           version: ${{ github.run_id }}-${{ github.run_attempt }} # precisa ser único
           deleteincompletescan: true
           failbuild: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
