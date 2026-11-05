@@ -1,0 +1,390 @@
+# =============================================================================
+# TEMPLATE VERACODE PARA GITHUB ACTIONS
+#
+# Cada bloco abaixo é independente. Para adaptar ao ambiente, você pode:
+#   a) Apagar o job inteiro; ou
+#   b) Desligar sem editar: crie a variável do repositório indicada no bloco
+#      com o valor false (Settings > Secrets and variables > Actions > Variables).
+#
+# DEPENDÊNCIAS ENTRE OS JOBS (ao apagar um job, apague também os que dependem dele):
+#   setup          -> todos os jobs
+#   build          -> sast_sandbox, sast_pipeline_scan, sast_upload_scan
+#   sca            -> fix_for_sca          (usa o scaResults.json)
+#   sast_pipeline_scan -> fix_for_sast     (usa o results.json)
+#
+# SECRETS NECESSÁRIOS (Settings > Secrets and variables > Actions > Secrets):
+#   VERACODE_API_ID, VERACODE_API_KEY  -> SAST, IaC e Fix
+#   SRCCLR_API_TOKEN                   -> SCA (token do agent)
+#
+# O item "SAST Repository Scan" não é um job: ele roda pelo Veracode Workflow App
+# e é configurado no arquivo veracode.yml deste template.
+#
+# NENHUM SCAN QUEBRA O BUILD POR PADRÃO, nem por vulnerabilidade nem por erro do scan.
+# Para bloquear, crie a variável do repositório VERACODE_BREAK_BUILD=true.
+# Atenção: no modo padrão, um scan com erro (ex.: credencial inválida) também fica
+# verde. Confira o log do step, marcado como falho mesmo com o job concluído.
+# =============================================================================
+name: Veracode Security
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Permissão mínima. Cada job pede só o que precisa a mais.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # SETUP: define o nome da aplicação (repositório + branch)
+  # Ex.: repositório "loja", branch "feature/login" -> app "loja-feature-login"
+  # PRs vindos de fork são ignorados, pois não têm acesso aos secrets.
+  # ---------------------------------------------------------------------------
+  setup:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      app_name: ${{ steps.names.outputs.app_name }}
+      branch: ${{ steps.names.outputs.branch }}
+      branch_slug: ${{ steps.names.outputs.branch_slug }}
+      is_main: ${{ steps.names.outputs.is_main }}
+    steps:
+      - id: names
+        env:
+          REPO: ${{ github.event.repository.name }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          BRANCH_SLUG="${BRANCH//\//-}"
+          IS_MAIN=false
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then IS_MAIN=true; fi
+          {
+            echo "app_name=${REPO}-${BRANCH_SLUG}"
+            echo "branch=${BRANCH}"
+            echo "branch_slug=${BRANCH_SLUG}"
+            echo "is_main=${IS_MAIN}"
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # BUILD: gera o pacote usado pelos scans de SAST (artifact veracode-artifact)
+  # A Veracode analisa o pacote, então o projeto precisa compilar aqui.
+  # Adicione o setup da linguagem no local indicado.
+  # ---------------------------------------------------------------------------
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Instalar o Veracode CLI
+        working-directory: ${{ runner.temp }}
+        run: curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+
+      - name: Empacotar a aplicação
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
+        run: |
+          "$RUNNER_TEMP/veracode" package --source . --output "$RUNNER_TEMP/veracode-artifacts" --trust --strict
+          # O CLI descarta artefatos com data antiga (ex.: WAR do Spring Boot com data de 1980).
+          # Sem isto, o scan analisaria só o JavaScript e a pipeline ficaria verde.
+          find . -type f -path '*/target/*' \( -name '*.war' -o -name '*.jar' \) -not -path '*/target/*/*' \
+            -exec cp -n {} "$RUNNER_TEMP/veracode-artifacts/" \;
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: veracode-artifact
+          path: ${{ runner.temp }}/veracode-artifacts/*
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 1. SCA (agent-based)
+  # Desligar: variável VERACODE_SCA=false
+  #
+  # Arquivo necessário: o manifesto/lockfile do projeto, como package-lock.json,
+  # pom.xml, build.gradle, requirements.txt ou go.mod.
+  # O runner também precisa da ferramenta de build correspondente.
+  # Gera o artifact "Veracode Agent Based SCA Results", com o scaResults.json no PR.
+  # ---------------------------------------------------------------------------
+  sca:
+    needs: setup
+    if: vars.VERACODE_SCA != 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Veracode SCA
+        continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
+        uses: veracode/veracode-sca@v2.1.20
+        env:
+          SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
+          VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
+        with:
+          github_token: ${{ github.token }}
+          create-issues: false
+          recursive: true
+          allow-dirty: true
+          breakBuildOnPolicyFindings: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          # Gera o scaResults.json usado pelo Fix for SCA (só em PR)
+          sca_fix_enabled: ${{ github.event_name == 'pull_request' && vars.VERACODE_FIX_SCA != 'false' }}
+          profile_name: ${{ needs.setup.outputs.app_name }}
+          pr_number: ${{ github.event.pull_request.number }}
+
+  # ---------------------------------------------------------------------------
+  # 1.1 FIX FOR SCA: abre um PR com as correções das bibliotecas vulneráveis
+  # Desligar: variável VERACODE_FIX_SCA=false
+  #
+  # Depende do job sca e de um pull request. Requer licença do Fix for SCA.
+  # Em Settings > Actions > General, marque "Read and write permissions" e
+  # "Allow GitHub Actions to create and approve pull requests".
+  # ---------------------------------------------------------------------------
+  fix_for_sca:
+    needs: [setup, sca]
+    if: github.event_name == 'pull_request' && vars.VERACODE_FIX_SCA != 'false'
+    continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }} # se o SCA falhar, não há scaResults.json
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Baixar o scaResults.json
+        uses: actions/download-artifact@v7
+        with:
+          name: Veracode Agent Based SCA Results
+          path: veracode_artifact_directory
+
+      # A action espera o código na pasta source-code
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.setup.outputs.branch }}
+          path: source-code
+
+      - name: Instalar o Veracode CLI
+        working-directory: ${{ runner.temp }}
+        run: curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+
+      - name: Obter o ID do artifact do SCA
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+            --jq '.artifacts[] | select(.name == "Veracode Agent Based SCA Results") | .id')
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Veracode Fix for SCA
+        uses: veracode/veracode-fix-for-sca@v0.1.9
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_KEY_ID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          CLI_PATH: ${{ runner.temp }}
+        with:
+          github-token: ${{ github.token }}
+          sca-scan-run-id: ${{ github.run_id }}
+          sca-scan-artifact-id: ${{ steps.artifact.outputs.id }}
+          repository: ${{ github.repository }}
+          branch: ${{ needs.setup.outputs.branch }}
+          github-api-url: ${{ github.api_url }}
+          pr-number: ${{ github.event.pull_request.number }}
+
+  # ---------------------------------------------------------------------------
+  # 2. IaC (também verifica secrets e dependências do diretório)
+  # Desligar: variável VERACODE_IAC=false
+  # Sem "policy", o escudo de política na plataforma fica vazio. Para avaliar por
+  # política, descomente a linha abaixo com o nome de uma política da sua conta.
+  # ---------------------------------------------------------------------------
+  iac:
+    needs: setup
+    if: vars.VERACODE_IAC != 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Veracode IaC
+        continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
+        uses: veracode/container_iac_secrets_scanning@v1.0.9
+        with:
+          vid: ${{ secrets.VERACODE_API_KEY_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          command: scan
+          type: directory
+          source: ./
+          format: json
+          fail_build: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          fail_build_on_error: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          # policy: Veracode Recommended Medium IAC
+
+  # ---------------------------------------------------------------------------
+  # 3. SAST SANDBOX: só em branches que não sejam main ou master
+  # Desligar: variável VERACODE_SANDBOX=false
+  # Resultado na plataforma Veracode, na sandbox com o nome da branch.
+  # ---------------------------------------------------------------------------
+  sast_sandbox:
+    needs: [setup, build]
+    if: needs.setup.outputs.is_main == 'false' && vars.VERACODE_SANDBOX != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: veracode-artifact
+          path: veracode-artifacts
+
+      # A action v0.2.3 não envia uma pasta para sandbox: é preciso passar um único arquivo.
+      - name: Unir os arquivos em um único pacote
+        run: cd veracode-artifacts && zip -r ../veracode-package.zip .
+
+      - name: Veracode Sandbox Scan
+        continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
+        uses: veracode/uploadandscan-action@v0.2.3
+        with:
+          vid: ${{ secrets.VERACODE_API_KEY_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          appname: ${{ needs.setup.outputs.app_name }}
+          createprofile: true
+          createsandbox: true
+          sandboxname: ${{ needs.setup.outputs.branch_slug }}
+          filepath: veracode-package.zip
+          version: ${{ github.run_id }}-${{ github.run_attempt }} # precisa ser único
+          deleteincompletescan: true
+          failbuild: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          gitRepositoryUrl: ${{ github.server_url }}/${{ github.repository }}
+
+  # ---------------------------------------------------------------------------
+  # 4. SAST PIPELINE SCAN: feedback rápido, com resultado em results.json
+  # Desligar: variável VERACODE_PIPELINE_SCAN=false
+  #
+  # O resultado NÃO vai para a plataforma: fica no results.json e no comentário do PR.
+  # O Pipeline Scan analisa um arquivo por vez. Se o empacotamento gerar vários,
+  # este job escolhe o maior e avisa no log.
+  # esd: true é obrigatório para o Fix for SAST funcionar.
+  # ---------------------------------------------------------------------------
+  sast_pipeline_scan:
+    needs: [setup, build]
+    if: vars.VERACODE_PIPELINE_SCAN != 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: veracode-artifact
+          path: veracode-artifacts
+
+      - name: Escolher o arquivo a escanear
+        id: pick
+        run: |
+          COUNT=$(ls -1 veracode-artifacts | wc -l)
+          FILE=$(ls -1S veracode-artifacts/* | head -n 1)
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::warning::O pacote gerou $COUNT arquivos. Escaneando apenas $FILE."
+          fi
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Veracode Pipeline Scan
+        continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
+        uses: veracode/Veracode-pipeline-scan-action@v1.0.25
+        with:
+          vid: ${{ secrets.VERACODE_API_KEY_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          file: ${{ steps.pick.outputs.file }}
+          json_output: true
+          json_output_file: results.json
+          esd: true
+          fail_build: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          fail_build_error: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+
+      - name: Guardar o results.json
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: veracode-results-json
+          path: results.json
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 5. SAST REPOSITORY SCAN
+  # Não é um job. Roda pelo Veracode Workflow App, com a configuração no veracode.yml.
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # 6. SAST UPLOAD AND SCAN (Policy Scan): só em main ou master
+  # Desligar: variável VERACODE_UPLOAD_SCAN=false
+  # Resultado na plataforma Veracode. Para rodar em todas as branches, remova a
+  # primeira condição do "if".
+  # ---------------------------------------------------------------------------
+  sast_upload_scan:
+    needs: [setup, build]
+    if: needs.setup.outputs.is_main == 'true' && vars.VERACODE_UPLOAD_SCAN != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: veracode-artifact
+          path: veracode-artifacts
+
+      - name: Veracode Upload and Scan
+        continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }}
+        uses: veracode/uploadandscan-action@v0.2.3
+        with:
+          vid: ${{ secrets.VERACODE_API_KEY_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          appname: ${{ needs.setup.outputs.app_name }}
+          createprofile: true
+          filepath: veracode-artifacts/
+          version: ${{ github.run_id }}-${{ github.run_attempt }} # precisa ser único
+          deleteincompletescan: true
+          failbuild: ${{ vars.VERACODE_BREAK_BUILD == 'true' }}
+          gitRepositoryUrl: ${{ github.server_url }}/${{ github.repository }}
+
+  # ---------------------------------------------------------------------------
+  # 7. FIX FOR SAST: abre um PR com as correções sugeridas
+  # Desligar: variável VERACODE_FIX_SAST=false
+  #
+  # Depende do results.json do job sast_pipeline_scan (item 4).
+  # Requer as mesmas permissões do repositório descritas no item 1.1.
+  # ---------------------------------------------------------------------------
+  fix_for_sast:
+    needs: [setup, sast_pipeline_scan]
+    if: vars.VERACODE_FIX_SAST != 'false'
+    continue-on-error: ${{ vars.VERACODE_BREAK_BUILD != 'true' }} # se o scan falhar, não há results.json
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Baixar o results.json
+        uses: actions/download-artifact@v7
+        with:
+          name: veracode-results-json
+
+      - name: Veracode Fix
+        uses: veracode/veracode-fix@v1.0.7
+        with:
+          vid: ${{ secrets.VERACODE_API_KEY_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY_SECRET }}
+          inputFile: results.json
+          fixType: batch
+          files: all
+          createPR: true
+          prComment: ${{ github.event_name == 'pull_request' }}
