@@ -379,7 +379,7 @@ public class UserController {
 			String mysqlCurrentDateTime = (new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"))
 					.format(Calendar.getInstance().getTime());
 			String sql = "INSERT INTO users (username, password, created_at, real_name, blab_name) VALUES (?, ?, ?, ?, ?)";
-			PreparedStatement sqlStatement = connect.prepareStatement(sql);
+			sqlStatement = connect.prepareStatement(sql);
 			sqlStatement.setString(1, username);
 			sqlStatement.setString(2, BCrypt.hashpw(password, BCrypt.gensalt()));
 			sqlStatement.setString(3, mysqlCurrentDateTime);
